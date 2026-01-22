@@ -1,6 +1,9 @@
+-- Zepto Inventory Analysis
+
 USE zepto_project;
 
-CREATE TABLE zepto_data (
+-- 1. CREATE TABLE
+CREATE TABLE IF NOT EXISTS zepto_data (
     sku_id INT IDENTITY(1,1) PRIMARY KEY,
     category VARCHAR(120),
     name VARCHAR(150) NOT NULL,
@@ -13,8 +16,11 @@ CREATE TABLE zepto_data (
     quantity INT
 );
 
-SELECT * FROM zepto_data;
--- Add a new column
+-- LOAD CSV DATA
+
+-- ADD STOCK FLAG COLUMN 
+
+ALTER TABLE zepto_data ADD outOfStock_bit BIT;
 UPDATE zepto_data
 SET outOfStock_bit =
     CASE
@@ -23,18 +29,15 @@ SET outOfStock_bit =
         ELSE NULL
     END;
 
--- Data exploration
+-- =====================================================
+-- DATA QUALITY CHECKS
+-- =====================================================
 
--- count number of rows
-SELECT COUNT(*) FROM zepto_data;
+-- Total rows
+SELECT COUNT(*) as total_skus FROM zepto_data;
 
---sample data
-SELECT TOP 10 *
- FROM zepto_data ;
-
- -- Check for null values
-
- SELECT * FROM zepto_data
+-- Null checks
+SELECT * FROM zepto_data
     WHERE Category IS NULL
     OR name IS NULL
     OR mrp IS NULL
@@ -45,8 +48,14 @@ SELECT TOP 10 *
     OR outOfStock IS NULL
     OR quantity IS NULL;
 
--- Product categories
+-- Duplicate products
+SELECT name, 
+    COUNT(*) AS duplicate_count
+    FROM zepto_data 
+    GROUP BY name 
+    HAVING COUNT(*) > 1;
 
+-- Categories overview
 SELECT DISTINCT Category
 FROM zepto_data
 ORDER BY Category;
@@ -57,37 +66,36 @@ SELECT outOfStock_bit, COUNT(*) as count
     FROM zepto_data
     GROUP BY outOfStock_bit;
 
--- Product names present mutiple times
+-- ========================================================
+-- DATA CLEANING
+-- ========================================================
 
-SELECT name, COUNT(sku_id) as "Number of SKUs"
-    FROM zepto_data
-    GROUP BY name
-    HAVING COUNT(sku_id) > 1
-    ORDER BY COUNT(sku_id) DESC;
-
--- Data Cleaning
-
--- Products with price = 0
-
-SELECT * FROM zepto_data   
-    WHERE mrp = 0 or discountedSellingPrice = 0;
-
+-- Remove invalid prices
 DELETE FROM zepto_data
     WHERE mrp <= 0 or discountedSellingPrice <= 0;
 
--- invalid discount percent
-
+-- Remove invalid discounts (>100% or negative)
 SELECT * FROM zepto_data
     WHERE discountPercent < 0 OR discountPercent > 100;
 
--- Convert paise into rupees
-
+-- Convert paise into INR
 UPDATE zepto_data
     SET mrp = mrp/100.0,
     discountedSellingPrice = discountedSellingPrice/100.0;
 
---Q1 Find the top best-value products based on the discount percentage.
+-- Stock status summary (post-cleaning)
+SELECT 
+    outOfStock_bit,
+    COUNT(*) AS count,
+    ROUND(100.0 * COUNT(*) / SUM(COUNT(*)) OVER(), 2) AS percentage
+FROM zepto_data 
+GROUP BY outOfStock_bit;
 
+-- ========================================================
+-- BUSINESS INSIGHTS
+-- ========================================================
+
+-- Q1 Find the top best-value products based on the discount percentage.
 SELECT DISTINCT TOP(10)
     name, 
     mrp, 
